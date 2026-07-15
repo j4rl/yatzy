@@ -104,6 +104,9 @@ I vanliga regler krävs olika valörer för sådana grupper.
 ### Sprint
 
 - Max 2 slag per tur.
+- Sprint har generellt en lägre bonusgräns än motsvarande standardläge.
+- I vanlig Yatzy är bonusgränsen 56 poäng i övre avdelningen.
+- I Maxi-Yatzy är bonusgränsen 72 poäng i övre avdelningen.
 - I övrigt vanliga poäng för valt läge.
 
 ### Rak spelomgång

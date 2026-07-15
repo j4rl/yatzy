@@ -82,7 +82,8 @@ const ruleVariants = {
     id: "sprint",
     name: "Sprint",
     maxRolls: 2,
-    details: ["Max 2 slag per tur", "I övrigt vanliga poäng för valt läge"],
+    bonusThresholds: { yatzy: 56, maxi: 72 },
+    details: ["Max 2 slag per tur", "Lägre bonusgräns än i standardläget"],
   },
 };
 
@@ -112,6 +113,8 @@ function buildRuleset(
         yatzyName: "Yatzy",
       };
 
+  const bonusThreshold = variant.bonusThresholds?.[mode.id] ?? mode.bonusThreshold;
+
   return {
     ...mode,
     ...variant,
@@ -122,12 +125,12 @@ function buildRuleset(
     rollPot: variant.id === "rollPot",
     forcedOrder: straight,
     name: `${variant.id === "classic" ? mode.name : `${variant.name} (${mode.name})`}${straight ? " Rak" : ""}`,
-    bonusThreshold: variant.zeroUpperBonus ? 0 : mode.bonusThreshold,
+    bonusThreshold: variant.zeroUpperBonus ? 0 : bonusThreshold,
     bonusValue: mode.bonusValue,
     categories: mode.categories,
     details: [
       `${mode.diceCount} tärningar`,
-      `Bonus ${mode.bonusValue} poäng ${variant.zeroUpperBonus ? "om hela övre avdelningen är 0" : `vid minst ${mode.bonusThreshold} i övre avdelningen`}`,
+      `Bonus ${mode.bonusValue} poäng ${variant.zeroUpperBonus ? "om hela övre avdelningen är 0" : `vid minst ${bonusThreshold} i övre avdelningen`}`,
       ...variant.details,
       ...(straight ? ["Rak spelomgång: kategorierna fylls uppifrån och ned"] : []),
     ],
@@ -795,8 +798,11 @@ function renderScoreboard() {
   const ruleset = currentRuleset();
   elements.scoreboard.innerHTML = "";
 
+  elements.scoreboard.append(renderMobileScorecard(ruleset));
+
   const wrapper = document.createElement("div");
   wrapper.className = "protocol-wrap";
+  wrapper.setAttribute("aria-label", "Protokoll för alla spelare");
   const table = document.createElement("table");
   table.className = "protocol-table";
 
@@ -833,6 +839,103 @@ function renderScoreboard() {
 
   wrapper.append(table);
   elements.scoreboard.append(wrapper);
+}
+
+function renderMobileScorecard(ruleset) {
+  const player = activePlayer();
+  const totals = calculateTotals(player);
+  const scorecard = document.createElement("div");
+  scorecard.className = "mobile-scorecard";
+  scorecard.setAttribute("aria-label", `Protokoll för ${player.name}`);
+
+  const header = document.createElement("div");
+  header.className = "mobile-scorecard-header";
+  header.innerHTML = `
+    <div>
+      <p class="eyebrow">Fyll i</p>
+      <h3>${escapeHtml(player.name)}</h3>
+    </div>
+    <div class="mobile-score-total">
+      <span>Totalt</span>
+      <strong>${totals.total}</strong>
+    </div>
+  `;
+  scorecard.append(header);
+
+  appendMobileScoreSection(scorecard, "Övre avdelningen", ruleset.categories.upper);
+  appendMobileSummaryRow(scorecard, "Sum", totals.upperTotal);
+  appendMobileSummaryRow(scorecard, "Bonus", totals.bonus);
+  appendMobileScoreSection(scorecard, "Nedre avdelningen", ruleset.categories.lower);
+  if (ruleset.rollPot) {
+    appendMobileSummaryRow(scorecard, "Pott", player.pot);
+    appendMobileSummaryRow(scorecard, "Pottstraff", totals.penalty, "penalty-row");
+  }
+  appendMobileSummaryRow(scorecard, "Totalsum", totals.total, "total-row");
+
+  return scorecard;
+}
+
+function appendMobileScoreSection(scorecard, title, categories) {
+  const section = document.createElement("section");
+  section.className = "score-section";
+
+  const header = document.createElement("div");
+  header.className = "score-section-header";
+  header.innerHTML = `<h3>${escapeHtml(title)}</h3>`;
+  section.append(header);
+
+  categories.forEach((category) => appendMobileCategoryRow(section, category));
+  scorecard.append(section);
+}
+
+function appendMobileCategoryRow(section, category) {
+  const player = activePlayer();
+  const locked = category.id in player.scores;
+  const blocked = !locked && !canScore(category);
+  const preview = scoreCategory(category, state.dice, currentRuleset());
+  const row = document.createElement("div");
+  row.className = `score-row ${locked ? "locked" : ""} ${blocked ? "blocked" : ""}`;
+
+  const name = document.createElement("div");
+  name.className = "score-name";
+  name.innerHTML = `<strong>${escapeHtml(category.name)}</strong><span>${escapeHtml(category.hint)}</span>`;
+  row.append(name);
+
+  const previewLabel = document.createElement("div");
+  previewLabel.className = "score-preview";
+  previewLabel.textContent = locked
+    ? "Ifylld"
+    : state.rollCount > 0
+      ? `Ger ${preview} poäng`
+      : "Fyll i tärningarna först";
+  row.append(previewLabel);
+
+  const value = document.createElement("div");
+  value.className = "score-value";
+  value.textContent = locked ? player.scores[category.id] : preview;
+  row.append(value);
+
+  const button = document.createElement("button");
+  button.className = "score-button";
+  button.type = "button";
+  button.disabled = locked || !canScore(category);
+  button.textContent = locked ? "Klar" : "Fyll";
+  button.title = locked ? `${category.name} är ifylld` : `${category.name}: fyll ${preview} poäng`;
+  button.addEventListener("click", () => recordScore(category));
+  row.append(button);
+
+  section.append(row);
+}
+
+function appendMobileSummaryRow(scorecard, label, value, className = "") {
+  const row = document.createElement("div");
+  row.className = `score-row summary-row ${className}`;
+  row.innerHTML = `
+    <div class="score-name"><strong>${escapeHtml(label)}</strong></div>
+    <div class="score-preview"></div>
+    <div class="score-value">${value}</div>
+  `;
+  scorecard.append(row);
 }
 
 function appendProtocolSection(tbody, title, categories) {
